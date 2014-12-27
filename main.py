@@ -119,6 +119,10 @@ class Value(object):
         val1, val2 = Value.same(val1, val2)
         if op == '+':
             return val1.add(val2).shrink()
+        elif op == '*':
+            return val1.multiply(val2).shrink()
+        elif op == '**':
+            return val1.power(val2).shrink()
 
 
 class Integer(Value):
@@ -129,6 +133,14 @@ class Integer(Value):
     def add(self, value):
         """ add two Integers """
         return Integer(self.val + value.val)
+
+    def multiply(self, value):
+        """ multiple to Integers """
+        return Integer(self.val * value.val)
+
+    def power(self, value):
+        """ raise self to value exponent """
+        return Integer(self.val ** value.val)
 
 
 class Parser(object):
@@ -196,6 +208,13 @@ class Parser(object):
             return (Token(Token.semicolon, ';'), cursor+1)
         elif char == '+':
             return (Token(Token.operator, '+'), cursor+1)
+        elif char == '*':
+            # either multiplication or exponentiation
+            if cursor+1 >= len(self.data) or \
+                    self.data[cursor+1] != "*":
+                return (Token(Token.operator, '*'), cursor+1)
+            if self.data[cursor+1] == "*":
+                return (Token(Token.operator, '**'), cursor+2)
         elif char == '=':
             return (Token(Token.assign, '='), cursor+1)
 
