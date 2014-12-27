@@ -216,7 +216,7 @@ class Vector(Value):
 
     def multiply(self, value):
         """ elementwise multiplication """
-        return Vector._element_binary_op(self, '+', value)
+        return Vector._element_binary_op(self, '*', value)
 
     def power(self, value):
         """ elementwise exponentiation """
