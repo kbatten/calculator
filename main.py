@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
 """
-recursive descent parser/tokenizer/evaluator bignum calculator
+recursive descent parser/tokenizer/evaluator APLish calculator
 
-based off of Rob Pike's slides implementing one in golang
- https://www.youtube.com/watch?v=PXoG0WX0r_E
+it is similar to a normal calculator but precedence is by order, not by
+operation type
+
+based off of Rob Pike's implimentation in golang
+https://www.youtube.com/watch?v=PXoG0WX0r_E
 """
 
 
