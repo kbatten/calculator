@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """
 recursive descent parser/tokenizer/evaluator bignum calculator
@@ -176,9 +176,9 @@ class Parser(object):
                     break
                 c = self.data[cursor]
             return (Token(Token.space, '<space>'), cursor)
-        elif c in '0123456789':
+        elif c.isdigit():
             text = ""
-            while c in '0123456789':
+            while c.isdigit():
                 text += c
                 cursor += 1
                 if cursor >= len(self.data):
