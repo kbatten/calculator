@@ -66,8 +66,8 @@ class Token(object):
     left_bracket = 2004
     right_bracket = 2005
     semicolon = 2006
-    equal = 2007
-    space = 2008
+    assign = 2007
+    whitespace = 2008
 
     def __init__(self, typ, text):
         self.typ = typ
@@ -129,7 +129,7 @@ class Parser(object):
         self.cursor = 0
 
         # prime with first token
-        return self.expression(self.next_tok())
+        return self.expression(self.next_tok_skip_whitespace())
 
 
     # Tokenizer functions
@@ -139,12 +139,26 @@ class Parser(object):
         tok, _ = self._next_tok_and_cursor()
         return tok
 
-
     # get the next token and advance
     def next_tok(self):
         tok, self.cursor = self._next_tok_and_cursor()
         return tok
 
+    # get the next non-whitespace token without advancing
+    def peek_tok_skip_whitespace(self):
+        cursor_saved = self.cursor
+        tok, self.cursor = self._next_tok_and_cursor()
+        while tok.typ == Token.whitespace:
+            tok, self.cursor = self._next_tok_and_cursor()
+        self.cursor = cursor_saved
+        return tok
+
+    # get the next non-whitespace token and advance
+    def next_tok_skip_whitespace(self):
+        tok, self.cursor = self._next_tok_and_cursor()
+        while tok.typ == Token.whitespace:
+            tok, self.cursor = self._next_tok_and_cursor()
+        return tok
 
     def _next_tok_and_cursor(self):
         cursor = self.cursor
@@ -167,7 +181,8 @@ class Parser(object):
         elif c == '+':
             return (Token(Token.operator, '+'), cursor+1)
         elif c == '=':
-            return (Token(Token.operator, '='), cursor+1)
+            return (Token(Token.assign, '='), cursor+1)
+
         elif c in " \t":
             # consume all but one space
             while c in " \t":
@@ -175,7 +190,8 @@ class Parser(object):
                 if cursor >= len(self.data):
                     break
                 c = self.data[cursor]
-            return (Token(Token.space, '<space>'), cursor)
+            return (Token(Token.whitespace, '<space>'), cursor)
+
         elif c.isdigit():
             text = ""
             while c.isdigit():
@@ -186,26 +202,28 @@ class Parser(object):
                 c = self.data[cursor]
             return (Token(Token.number, text), cursor)
 
+        # identifier must start with alpha, but can then be alphanumeric
+        elif c.isalpha():
+            text = ""
+            while c.isalnum():
+                text += c
+                cursor += 1
+                if cursor >= len(self.data):
+                    break
+                c = self.data[cursor]
+            return (Token(Token.identifier, text), cursor)
+
         raise Exception("unexpected " + c)
 
 
     # Grammar functions
 
     def expression(self, tok):
-        # whitespace is valid but does nothing
-        if tok.typ == Token.space:
-            tok = self.next_tok()
-
-        # left side
+       # left side
         expr = self.operand(tok)
 
         # right side
-        tok_next = self.peek_tok()
-
-        # whitespace is valid but does nothing
-        if tok_next.typ == Token.space:
-            self.next_tok()
-            tok_next = self.peek_tok()
+        tok_next = self.peek_tok_skip_whitespace()
 
         if tok_next.typ == Token.newline or \
                 tok_next.typ == Token.eof or \
@@ -216,8 +234,16 @@ class Parser(object):
 
         # an operator on the right means binary operation
         if tok_next.typ == Token.operator:
-            tok = self.next_tok()
-            return Value.binary_op(expr, tok.text, self.expression(self.next_tok()))  # recurse
+            tok = self.next_tok_skip_whitespace()
+            return Value.binary_op(expr, tok.text, self.expression(self.next_tok_skip_whitespace()))  # recurse
+
+        # assignment
+        if tok_next.typ == Token.assign:
+            identifier = tok.text
+            tok = self.next_tok_skip_whitespace()
+            val = self.expression(self.next_tok_skip_whitespace())  # recurse
+            self.variables[identifier] = val
+            return val
 
         raise Exception("after expresion: unexpected " + str(tok_next))
 
@@ -225,11 +251,11 @@ class Parser(object):
     def operand(self, tok):
         # an operator means a unary operation
         if tok.typ == Token.operator:
-            expr = Value.unary_op(tok.text, self.expression(self.next_tok()))  # recurse
+            expr = Value.unary_op(tok.text, self.expression(self.next_tok_skip_whitespace()))  # recurse
 
         elif tok.typ == Token.left_paren:
-            expr = self.expression(self.next_tok())  # recurse
-            tok = self.next_tok()
+            expr = self.expression(self.next_tok_skip_whitespace())  # recurse
+            tok = self.next_tok_skip_whitespace()
             if tok.typ != Token.right_paren:
                 raise Exception("expected ')', found " + str(tok))
 
@@ -238,7 +264,12 @@ class Parser(object):
             expr = self.number(tok)
 
         elif tok.typ == Token.identifier:
-            expr = variables.get(tok.text, None)
+            # first check if we are assigning, then evaluate
+            tok_next = self.peek_tok_skip_whitespace()
+            if tok_next.typ == Token.assign:
+                self.next_tok_skip_whitespace()  # consume assignment operator
+                self.variables[tok.text] = self.expression(self.next_tok_skip_whitespace())  # recurse
+            expr = self.variables.get(tok.text, None)
             if expr is None:
                 raise Exception(str(tok) + " undefined")
 
