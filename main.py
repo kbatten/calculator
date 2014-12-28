@@ -29,8 +29,7 @@ if sys.version_info < (3, 0):
 #   ( expression )
 #   ( expression ) [ expression ]...
 #   operand
-#   number
-#   rational
+#   number  -- Integer
 #   vector
 #   variable
 #   operand [ expression ]...
@@ -51,6 +50,7 @@ if sys.version_info < (3, 0):
 
 class Token(object):
     """ Token constants """
+
     # meta
     statement_list = 1000
     statement = 1001
@@ -79,20 +79,28 @@ class Token(object):
         self.text = text
 
     def __str__(self):
+        if self.typ == Token.eof:
+            return "<eof>"
+        elif self.typ == Token.newline:
+            return "<nl>"
+        elif self.typ == Token.whitespace:
+            return "<ws>"
         return self.text
 
     def __repr__(self):
-        return "(" + str(self.typ) + ", " + self.text + ")"
+        return "(" + str(self.typ) + ", " + str(self) + ")"
 
 
 class Value(object):
     """ Base value object, subclass types from this """
-    def __init__(self, str_val):
-        self.str_val = str_val
-        self.val = str_val
+    def __init__(self, val):
+        self.val = val
 
     def __str__(self):
         return str(self.val)
+
+    def __repr__(self):
+        return "(" + self.__class__.__name__ + ", " + str(self) + ")"
 
     def value_as(self, value):
         """
@@ -109,11 +117,11 @@ class Value(object):
         return self
 
     @staticmethod
-    def same(val1, val2):
+    def same(value1, value2):
         """
         get values v1 and v2 as the same underlying type (int, vector, matrix)
         """
-        return (val1.value_as(val2), val2.value_as(val1))
+        return (value1.value_as(value2), value2.value_as(value1))
 
     @staticmethod
     def unary_op(value, op):
@@ -122,28 +130,33 @@ class Value(object):
             return value.neg().shrink()
 
     @staticmethod
-    def binary_op(val1, op, val2):
+    def binary_op(value1, op, value2):
         """ perform a binary operation on the two values """
-        val1, val2 = Value.same(val1, val2)
+        value1, value2 = Value.same(value1, value2)
         if op == '+':
-            return val1.add(val2).shrink()
+            return value1.add(value2).shrink()
         elif op == '-':
-            return val1.sub(val2).shrink()
+            return value1.sub(value2).shrink()
         elif op == '*':
-            return val1.multiply(val2).shrink()
+            return value1.multiply(value2).shrink()
         elif op == '**':
-            return val1.power(val2).shrink()
+            return value1.power(value2).shrink()
 
 
 class Integer(Value):
     """ Integer type """
-    def __init__(self, str_val):
-        super(Integer, self).__init__(str_val)
-        self.val = int(str_val)
+
+    def value_as(self, value):
+        """ get this value as either an Integer or Vector """
+        if value.__class__.__name__ == "Vector":
+            return Vector([self])
+        return self
+
+    # operations
 
     def neg(self):
         """ negate Integer """
-        return Integer("-" + self.str_val)
+        return Integer(-self.val)
 
     def add(self, value):
         """ add two Integers """
@@ -161,26 +174,17 @@ class Integer(Value):
         """ raise self to value exponent """
         return Integer(self.val ** value.val)
 
-    def value_as(self, value):
-        """ get this value as either an Integer or Vector """
-        if value.__class__.__name__ == "Vector":
-            return Vector(str(self.val))
-        return self
-
 
 class Vector(Value):
     """ Vector type """
-    def __init__(self, str_val):
-        super(Vector, self).__init__(str_val)
-        self.val = [Integer(val) for val in str_val.split(' ')]
 
     def __str__(self):
-        return ' '.join([ele.str_val for ele in self.val])
+        return ' '.join([str(ele) for ele in self.val])
 
     @staticmethod
     def _element_unary_op(value, op):
         """ perform element by element unary operation """
-        return Vector(' '.join([str(Value.unary_op(v, op)) for v in value.val]))
+        return Vector([Value.unary_op(v, op) for v in value.val])
 
     @staticmethod
     def _element_binary_op(value1, op, value2):
@@ -192,15 +196,17 @@ class Vector(Value):
         """
         # [a] op [b, c] = [a op b, a op c]
         if len(value1.val) == 1:
-            return Vector(' '.join([str(Value.binary_op(value1.val[0], op, v)) for v in value2.val]))
+            return Vector([Value.binary_op(value1.val[0], op, v) for v in value2.val])
         # [a, b] op [c] = [a op c, b op c]
         elif len(value2.val) == 1:
-            return Vector(' '.join([str(Value.binary_op(v, op, value2.val[0])) for v in value1.val]))
+            return Vector([Value.binary_op(v, op, value2.val[0]) for v in value1.val])
         # [a, b] op [c, d] = [a op c, b op d]
         elif len(value1.val) == len(value2.val):
-            return Vector(' '.join([str(Value.binary_op(v1, op, v2)) for v1, v2 in zip(value1.val, value2.val)]))
+            return Vector([Value.binary_op(v1, op, v2) for v1, v2 in zip(value1.val, value2.val)])
         # [a, b] op [c, d, e] is invalid
         raise Exception("mismatched vector lengths")
+
+    # operations
 
     def neg(self):
         """ negate all values in this Vector """
@@ -225,133 +231,134 @@ class Vector(Value):
     def shrink(self):
         """ for a one element list, return the single element """
         if len(self.val) == 1:
-            return self.val[0]
+            return self.val[0].shrink()
         return self
 
 
 class Parser(object):
-    """ parse and tokenize an input string """
+    """ tokenize, parse and evaluate an input string """
     def __init__(self):
         self.variables = {}
-        self.cursor = 0
-        self.data = ""
+        self.tokens = []
 
-    def evaluate(self, data):
+        self.data = ""
+        self.cursor = 0
+
+    def execute(self, data):
         """ evaluate the input expression """
-        # reset data and cursor, variables persist
+        # single line execution only
+
+        # reset data and tokens, don't reset variables
         self.data = data
         self.cursor = 0
+        self.tokens = []
 
-        # prime with first token
-        # save result to 'ans'
-        ans = self.expression(self.next_tok_skip_whitespace())
+        self._tokenize()
+
+        # evaluate the tokens directly, prime with first token
+        ans = self._expression(self._next_tok_skip_whitespace())
+
+        # save result to ans variable
         self.variables['ans'] = ans
         return ans
 
-    # Tokenizer functions
+    # Scanner functions
 
-    def peek_tok(self):
-        """ get the next token without advancing """
-        tok, _ = self._next_tok_and_cursor()
-        return tok
+    def _tokenize(self):
+        """ scan input data and output a list of tokens """
+        tok = self._scan_tok()
+        while tok.typ != Token.eof:
+            self.tokens.append(tok)
+            tok = self._scan_tok()
+        self.tokens.append(tok)  # eof
 
-    def next_tok(self):
-        """ get the next token and advance """
-        tok, self.cursor = self._next_tok_and_cursor()
-        return tok
+    def _scan_tok(self):
+        """ scan in the next token and advance the cursor """
+        if self.cursor >= len(self.data):
+            return Token(Token.eof, '')
 
-    def peek_tok_skip_whitespace(self):
-        """ get the next non-whitespace token without advancing """
-        cursor_saved = self.cursor
-        tok, self.cursor = self._next_tok_and_cursor()
-        while tok.typ == Token.whitespace:
-            tok, self.cursor = self._next_tok_and_cursor()
-        self.cursor = cursor_saved
-        return tok
+        tok = None
+        tok_len = 1
 
-    def next_tok_skip_whitespace(self):
-        """ get the next non-whitespace token and advance """
-        tok, self.cursor = self._next_tok_and_cursor()
-        while tok.typ == Token.whitespace:
-            tok, self.cursor = self._next_tok_and_cursor()
-        return tok
-
-    def _next_tok_and_cursor(self):
-        """ scan the data for the next token """
-        cursor = self.cursor
-        if cursor >= len(self.data):
-            return (Token(Token.eof, ''), cursor+1)
-
-        char = self.data[cursor]
+        char = self.data[self.cursor]
         if char == "\n":
-            return (Token(Token.newline, '\n'), cursor+1)
+            tok = Token(Token.newline, "\n")
         elif char == '(':
-            return (Token(Token.left_paren, '('), cursor+1)
+            tok = Token(Token.left_paren, '(')
         elif char == ')':
-            return (Token(Token.right_paren, ')'), cursor+1)
+            tok = Token(Token.right_paren, ')')
         elif char == '[':
-            return (Token(Token.left_bracket, '['), cursor+1)
+            tok = Token(Token.left_bracket, '[')
         elif char == ']':
-            return (Token(Token.right_bracket, ']'), cursor+1)
+            tok = Token(Token.right_bracket, ']')
         elif char == ';':
-            return (Token(Token.semicolon, ';'), cursor+1)
+            tok = Token(Token.semicolon, ';')
         elif char == '+':
-            return (Token(Token.operator, '+'), cursor+1)
+            tok = Token(Token.operator, '+')
         elif char == '-':
-            return (Token(Token.operator, '-'), cursor+1)
+            tok = Token(Token.operator, '-')
         elif char == '*':
             # either multiplication or exponentiation
-            if cursor+1 >= len(self.data) or \
-                    self.data[cursor+1] != "*":
-                return (Token(Token.operator, '*'), cursor+1)
-            if self.data[cursor+1] == "*":
-                return (Token(Token.operator, '**'), cursor+2)
+            if self.cursor+1 >= len(self.data) or \
+                    self.data[self.cursor+1] != "*":
+                tok = Token(Token.operator, '*')
+            elif self.data[self.cursor+1] == "*":
+                tok = Token(Token.operator, '**')
+                tok_len = 2
         elif char == '=':
-            return (Token(Token.assign, '='), cursor+1)
+            tok = Token(Token.assign, '=')
 
         elif char in " \t":
             # consume all but one space
+            tok_len = 0
             while char in " \t":
-                cursor += 1
-                if cursor >= len(self.data):
+                tok_len += 1
+                if self.cursor + tok_len >= len(self.data):
                     break
-                char = self.data[cursor]
-            return (Token(Token.whitespace, '<space>'), cursor)
+                char = self.data[self.cursor + tok_len]
+            tok = Token(Token.whitespace, ' ')
 
         # number (vector is handled as tokens)
         elif char.isdigit():
             text = ""
+            tok_len = 0
             while char.isdigit():
                 text += char
-                cursor += 1
-                if cursor >= len(self.data):
+                tok_len += 1
+                if self.cursor + tok_len >= len(self.data):
                     break
-                char = self.data[cursor]
-            return (Token(Token.number, text), cursor)
+                char = self.data[self.cursor + tok_len]
+            tok = Token(Token.number, text)
 
         # identifier must start with alpha, but can then be alphanumeric
         elif char.isalpha():
             text = ""
+            tok_len = 0
             while char.isalnum():
                 text += char
-                cursor += 1
-                if cursor >= len(self.data):
+                tok_len += 1
+                if self.cursor + tok_len >= len(self.data):
                     break
-                char = self.data[cursor]
-            return (Token(Token.identifier, text), cursor)
+                char = self.data[self.cursor + tok_len]
+            tok = Token(Token.identifier, text)
 
-        raise Exception("unexpected " + char)
+        else:
+            raise Exception("unexpected " + char)
+
+        self.cursor += tok_len
+
+        return tok
 
     # Grammar functions
 
-    def expression(self, tok):
+    def _expression(self, tok):
         """ evaluate an expression token """
 
         # left side
-        expr = self.operand(tok)
+        expr = self._operand(tok)
 
         # right side
-        tok_next = self.peek_tok_skip_whitespace()
+        tok_next = self._peek_tok_skip_whitespace()
 
         if tok_next.typ == Token.newline or \
                 tok_next.typ == Token.eof or \
@@ -362,56 +369,54 @@ class Parser(object):
 
         # an operator on the right means binary operation
         if tok_next.typ == Token.operator:
-            tok = self.next_tok_skip_whitespace()
-            return Value.binary_op(expr, tok.text, self.expression(self.next_tok_skip_whitespace()))
+            tok = self._next_tok_skip_whitespace()
+            return Value.binary_op(expr, tok.text, self._expression(self._next_tok_skip_whitespace()))
 
         # assignment
         if tok_next.typ == Token.assign:
             identifier = tok.text
-            tok = self.next_tok_skip_whitespace()
-            val = self.expression(self.next_tok_skip_whitespace())
+            tok = self._next_tok_skip_whitespace()
+            val = self._expression(self._next_tok_skip_whitespace())
             self.variables[identifier] = val
             return val
 
         raise Exception("after expresion: unexpected " + str(tok_next))
 
-    def operand(self, tok):
+    def _operand(self, tok):
         """ evalate an operand token """
 
         # an operator means a unary operation
         if tok.typ == Token.operator:
-            expr = Value.unary_op(self.expression(self.next_tok_skip_whitespace()), tok.text)
+            expr = Value.unary_op(self._expression(self._next_tok_skip_whitespace()), tok.text)
 
         elif tok.typ == Token.left_paren:
-            expr = self.expression(self.next_tok_skip_whitespace())
-            tok = self.next_tok_skip_whitespace()
+            expr = self._expression(self._next_tok_skip_whitespace())
+            tok = self._next_tok_skip_whitespace()
             if tok.typ != Token.right_paren:
                 raise Exception("expected ')', found " + str(tok))
 
         # either a single number or a list seperated by whitespace
-        elif tok.typ == Token.number or \
-                tok.typ == Token.rational:
+        elif tok.typ == Token.number:
             is_vector = False
-            tok_next = self.peek_tok_skip_whitespace()
-            tok_list = [tok]
+            tok_next = self._peek_tok_skip_whitespace()
+            value_list = [Parser.number(tok)]
             # read in numbers till we hit something else
-            while tok_next.typ == Token.number or \
-                    tok.typ == Token.rational:
+            while tok_next.typ == Token.number:
                 is_vector = True
-                tok_list = tok_list + [tok_next]
-                self.next_tok_skip_whitespace()
-                tok_next = self.peek_tok_skip_whitespace()
+                value_list.append(Parser.number(tok_next))
+                self._next_tok_skip_whitespace()
+                tok_next = self._peek_tok_skip_whitespace()
             if is_vector is False:
-                expr = self.number(tok)
+                expr = value_list[0]
             else:
-                expr = self.vector(tok_list)
+                expr = self.vector(value_list)
 
         elif tok.typ == Token.identifier:
             # first check if we are assigning, then evaluate
-            tok_next = self.peek_tok_skip_whitespace()
+            tok_next = self._peek_tok_skip_whitespace()
             if tok_next.typ == Token.assign:
-                self.next_tok_skip_whitespace()  # consume assignment operator
-                self.variables[tok.text] = self.expression(self.next_tok_skip_whitespace())
+                self._next_tok_skip_whitespace()  # consume assignment operator
+                self.variables[tok.text] = self._expression(self._next_tok_skip_whitespace())
             expr = self.variables.get(tok.text, None)
             if expr is None:
                 raise Exception(str(tok) + " undefined")
@@ -421,21 +426,47 @@ class Parser(object):
 
         return expr
 
-    def number(self, tok):
+    def _peek_tok_skip_whitespace(self):
+        """ get the next non-whitespace token but don't modify tokenlist """
+        for tok in self.tokens:
+            if tok.typ != Token.whitespace:
+                return tok
+
+    def _next_tok_skip_whitespace(self):
+        """ get the next non-whitespace token and modify tokenlist """
+        while True:
+            tok = self.tokens.pop(0)
+            if tok.typ != Token.whitespace:
+                return tok
+
+    # Value functions
+
+    @staticmethod
+    def number(tok):
         """ evaluate a number token """
-        return Integer(tok.text)
+        return Integer(int(tok.text))
 
-    def vector(self, tok_list):
+    @staticmethod
+    def vector(value_list):
         """ evaluate a vector token """
-        return Vector(' '.join([tok.text for tok in tok_list]))
+        return Vector(value_list)
 
 
-if __name__ == '__main__':
+def main():
+    """ entry point """
     parser = Parser()
+    ans = ""
     while True:
         try:
-            result = parser.evaluate(input())
+            if ans is not None:
+                print(">>> ", end='')
+            else:
+                print("... ", end='')
+            ans = parser.execute(input())
         except EOFError:
+            print()
             break
-        print(result)
-        print()
+        print("\t" + str(ans), end='\n\n')
+
+if __name__ == '__main__':
+    main()
