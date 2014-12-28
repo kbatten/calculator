@@ -141,6 +141,8 @@ class Value(object):
             return value1.multiply(value2).shrink()
         elif op == '**':
             return value1.power(value2).shrink()
+        elif op == '+.*':
+            return value1.dot_product(value2).shrink()
 
 
 class Integer(Value):
@@ -206,11 +208,24 @@ class Vector(Value):
         # [a, b] op [c, d, e] is invalid
         raise Exception("mismatched vector lengths")
 
+    def shrink(self):
+        """ for a one element list, return the single element """
+        if len(self.val) == 1:
+            return self.val[0].shrink()
+        return self
+
     # operations
 
     def neg(self):
         """ negate all values in this Vector """
         return Vector._element_unary_op(self, '-')
+
+    def sum(self):
+        """ sum all the values in the vector """
+        acc = self.val[0]
+        for value in self.val[1:]:
+            acc = Value.binary_op(acc, '+', value)
+        return acc
 
     def add(self, value):
         """ add two Vectors """
@@ -228,11 +243,15 @@ class Vector(Value):
         """ elementwise exponentiation """
         return Vector._element_binary_op(self, '**', value)
 
-    def shrink(self):
-        """ for a one element list, return the single element """
-        if len(self.val) == 1:
-            return self.val[0].shrink()
-        return self
+    def dot_product(self, value):
+        """ dot product (inner product) of two vectors """
+        if len(self.val) == len(value.val):
+            # element multiple
+            vec = Vector._element_binary_op(self, '*', value)
+            # summation
+            return vec.sum()
+
+        raise Exception("mismatched vector lengths")
 
 
 class Parser(object):
@@ -293,12 +312,21 @@ class Parser(object):
             tok = Token(Token.right_bracket, ']')
         elif char == ';':
             tok = Token(Token.semicolon, ';')
+
+        # either addition or dot product
         elif char == '+':
-            tok = Token(Token.operator, '+')
+            if self.cursor+2 < len(self.data) and \
+                    self.data[self.cursor:self.cursor+3] == "+.*":
+                tok = Token(Token.operator, '+.*')
+                tok_len = 3
+            else:
+                tok = Token(Token.operator, '+')
+
         elif char == '-':
             tok = Token(Token.operator, '-')
+
+        # either multiplication or exponentiation
         elif char == '*':
-            # either multiplication or exponentiation
             if self.cursor+1 >= len(self.data) or \
                     self.data[self.cursor+1] != "*":
                 tok = Token(Token.operator, '*')
