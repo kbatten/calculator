@@ -23,6 +23,9 @@ if sys.version_info < (3, 0):
     input = raw_input
 
 
+import random
+
+
 # APL GRAMMAR
 #
 # operand
@@ -128,6 +131,8 @@ class Value(object):
         """ perform a unary operation on the value """
         if op == '-':
             return value.neg().shrink()
+        elif op == '?':
+            return value.roll().shrink()
 
     @staticmethod
     def binary_op(value1, op, value2):
@@ -159,6 +164,12 @@ class Integer(Value):
     def neg(self):
         """ negate Integer """
         return Integer(-self.val)
+
+    def roll(self):
+        """ generate a random integer from 1 to val """
+        if self.val < 1:
+            raise Exception("invalid roll value " + self.val)
+        return Integer(random.randint(1, self.val))
 
     def add(self, value):
         """ add two Integers """
@@ -219,6 +230,9 @@ class Vector(Value):
     def neg(self):
         """ negate all values in this Vector """
         return Vector._element_unary_op(self, '-')
+
+    def roll(self):
+        return Vector._element_unary_op(self, '?')
 
     def sum(self):
         """ sum all the values in the vector """
@@ -324,6 +338,8 @@ class Parser(object):
 
         elif char == '-':
             tok = Token(Token.operator, '-')
+        elif char == '?':
+            tok = Token(Token.operator, '?')
 
         # either multiplication or exponentiation
         elif char == '*':
