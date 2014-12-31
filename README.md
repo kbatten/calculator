@@ -13,6 +13,7 @@ Implements
 * multiplication
 * exponentiation
 * subtraction
+* random number generation
 * dot (inner) product
 
 Examples
@@ -38,6 +39,12 @@ Examples
 
 >>> 32+x
         -21
+
+>>> ? 54
+        34
+
+>>> ? 87 23 4 1 889234
+        26 6 1 1 123046
 ```
 
 Problems
