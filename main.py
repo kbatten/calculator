@@ -232,6 +232,7 @@ class Vector(Value):
         return Vector._element_unary_op(self, '-')
 
     def roll(self):
+        """ generate a random number for each element """
         return Vector._element_unary_op(self, '?')
 
     def sum(self):
