@@ -14,6 +14,7 @@ Implements
 * exponentiation
 * subtraction
 * random number generation
+* vector generator with iota (range 1-X)
 * dot (inner) product
 
 Examples
@@ -45,6 +46,9 @@ Examples
 
 >>> ? 87 23 4 1 889234
         26 6 1 1 123046
+
+>>> iota 4
+        1 2 3 4
 ```
 
 Problems

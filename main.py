@@ -133,6 +133,8 @@ class Value(object):
             return value.neg().shrink()
         elif op == '?':
             return value.roll().shrink()
+        elif op == 'iota':
+            return value.iota().shrink()
 
     @staticmethod
     def binary_op(value1, op, value2):
@@ -170,6 +172,12 @@ class Integer(Value):
         if self.val < 1:
             raise Exception("invalid roll value " + self.val)
         return Integer(random.randint(1, self.val))
+
+    def iota(self):
+        """ generate a vector from 1 to val """
+        if self.val < 1:
+            raise Exception("invalid iota value " + self.val)
+        return Vector(range(1, self.val+1))
 
     def add(self, value):
         """ add two Integers """
@@ -341,6 +349,13 @@ class Parser(object):
             tok = Token(Token.operator, '-')
         elif char == '?':
             tok = Token(Token.operator, '?')
+
+        # iota
+        elif char == 'i':
+            if self.cursor+3 < len(self.data) and \
+                    self.data[self.cursor:self.cursor+4] == "iota":
+                tok = Token(Token.operator, 'iota')
+                tok_len = 4
 
         # either multiplication or exponentiation
         elif char == '*':
