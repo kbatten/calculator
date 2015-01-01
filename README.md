@@ -15,6 +15,7 @@ Implements
 * subtraction
 * random number generation
 * vector generator with iota (range 1-X)
+* vector generator with rho (repeated values)
 * dot (inner) product
 
 Examples
@@ -49,6 +50,12 @@ Examples
 
 >>> iota 4
         1 2 3 4
+
+>>> 3 rho 9
+        9 9 9
+
+>>> 5 rho 2 3 4
+        2 3 4 2 3
 ```
 
 Problems
