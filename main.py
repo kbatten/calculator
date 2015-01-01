@@ -150,6 +150,8 @@ class Value(object):
             return value1.power(value2).shrink()
         elif op == '+.*':
             return value1.dot_product(value2).shrink()
+        elif op == 'rho':
+            return value1.rho(value2).shrink()
 
 
 class Integer(Value):
@@ -194,6 +196,14 @@ class Integer(Value):
     def power(self, value):
         """ raise self to value exponent """
         return Integer(self.val ** value.val)
+
+    def rho(self, value):
+        """
+        generate a vector based on parameters
+
+        length is self.val with value.val data repeated to fill up the length
+        """
+        return Vector([value for _ in range(self.val)])
 
 
 class Vector(Value):
@@ -276,6 +286,18 @@ class Vector(Value):
 
         raise Exception("mismatched vector lengths")
 
+    def rho(self, value):
+        """
+        generate a vector based on parameters
+
+        length is self.val with value.val data repeated to fill up the length
+        """
+        values = []
+        # for now the self.val is a single element list
+        for i in range(self.val[0].val):
+            values += [value.val[i % len(value.val)]]
+        return Vector(values)
+
 
 class Parser(object):
     """ tokenize, parse and evaluate an input string """
@@ -356,6 +378,13 @@ class Parser(object):
                     self.data[self.cursor:self.cursor+4] == "iota":
                 tok = Token(Token.operator, 'iota')
                 tok_len = 4
+
+        # rho
+        elif char == 'r':
+            if self.cursor+2 < len(self.data) and\
+                    self.data[self.cursor:self.cursor+3] == "rho":
+                tok = Token(Token.operator, 'rho')
+                tok_len = 3
 
         # either multiplication or exponentiation
         elif char == '*':
