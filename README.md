@@ -14,6 +14,7 @@ Implements
 * exponentiation
 * subtraction
 * random number generation
+* rational division
 * vector generator with iota (range 1-X)
 * vector generator with rho (repeated values)
 * dot (inner) product
@@ -56,6 +57,21 @@ Examples
 
 >>> 5 rho 2 3 4
         2 3 4 2 3
+
+>>> 5 / -3
+        -5/3
+
+>>> 25 / 5
+        5
+
+>>> 2432 / 34
+        1216/17
+
+>>> 5 + 1 / 2
+        11/2
+
+>>> (4 / 3) * (5/7)
+        20/21
 ```
 
 Problems

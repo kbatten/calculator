@@ -146,6 +146,8 @@ class Value(object):
             return value1.sub(value2).shrink()
         elif op == '*':
             return value1.multiply(value2).shrink()
+        elif op == '/':
+            return value1.divide(value2).shrink()
         elif op == '**':
             return value1.power(value2).shrink()
         elif op == '+.*':
@@ -161,6 +163,8 @@ class Integer(Value):
         """ get this value as either an Integer or Vector """
         if value.__class__.__name__ == "Vector":
             return Vector([self])
+        elif value.__class__.__name__ == "Rational":
+            return Rational(self.val, 1)
         return self
 
     # operations
@@ -193,6 +197,10 @@ class Integer(Value):
         """ multiple to Integers """
         return Integer(self.val * value.val)
 
+    def divide(self, value):
+        """ divide Integers and return an integer or rational """
+        return Rational(self.val, value.val)
+
     def power(self, value):
         """ raise self to value exponent """
         return Integer(self.val ** value.val)
@@ -204,6 +212,65 @@ class Integer(Value):
         length is self.val with value.val data repeated to fill up the length
         """
         return Vector([value for _ in range(self.val)])
+
+
+class Rational(Value):
+    """ Exact rational type """
+
+    def __init__(self, num, den):
+        self.num = num
+        self.den = den
+        self._reduce()
+
+    def __str__(self):
+        return str(self.num) + '/' + str(self.den)
+
+    @staticmethod
+    def gcd(val1, val2):
+        """ recursively calculate the GCD of two ints """
+        if val2 == 0:
+            return val1
+        return Rational.gcd(val2, val1 % val2)
+
+    def _reduce(self):
+        """ reduce the numerator and denominator as much as possible """
+        div = Rational.gcd(self.num, self.den)
+        self.num = int(self.num / div)
+        self.den = int(self.den / div)
+
+    def shrink(self):
+        """ if denominator is one, return an integer """
+        self._reduce()
+        if self.den == 1:
+            return Integer(self.num)
+        return self
+
+    # operations
+
+    def neg(self):
+        return Rational(-self.num, self.den)
+
+    def add(self, value):
+        """ add two Rationals """
+        num = self.num * value.den + self.den * value.num
+        den = self.den * value.den
+        return Rational(num, den)
+
+    def sub(self, value):
+        """ subtract two rationals"""
+        return self.add(self.value.neg())
+
+    def multiply(self, value):
+        """ multiply two rationals """
+        num = self.num * value.num
+        den = self.den * value.den
+        return Rational(num, den)
+
+    def divide(self, value):
+        """ divide two rationals """
+        num = self.num * value.den
+        den = self.den * value.num
+        return Rational(num, den)
 
 
 class Vector(Value):
@@ -394,6 +461,11 @@ class Parser(object):
             elif self.data[self.cursor+1] == "*":
                 tok = Token(Token.operator, '**')
                 tok_len = 2
+
+        # exact rational division
+        elif char == '/':
+            tok = Token(Token.operator, '/')
+
         elif char == '=':
             tok = Token(Token.assign, '=')
 
